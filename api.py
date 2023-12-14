@@ -238,8 +238,34 @@ async def offers_list(client: httpx.AsyncClient, headers: dict):
         
         offers_list = list_response.json()["data"]["inGameLoot"]["items"]
 
+        claimed_count = 0
+        unclaimed_count = 0
+        cannot_claim_count = 0
+        
+        can_claim_offers = []
+
+        for offer in offers_list:
+            eligibility = offer["offers"][0]["offerSelfConnection"]["eligibility"]
+            is_claimed = eligibility.get("isClaimed", False)
+            can_claim = eligibility.get("canClaim", False)
+
+            if is_claimed:
+                log.error(f"{BLUE}'{offer['game']['assets']['title']}' - '{offer['assets']['title']}': Already collected.{RESET}")
+                claimed_count += 1
+            elif can_claim:
+                log.error(f"{CYAN}'{offer['game']['assets']['title']}' - '{offer['assets']['title']}': Trying to claim.{RESET}")
+                unclaimed_count += 1
+                can_claim_offers.append(offer)
+            else:
+                log.error(f"{RED}'{offer['game']['assets']['title']}' - '{offer['assets']['title']}': Account link required. Link: {offer['assets']['externalClaimLink']}{RESET}")
+                cannot_claim_count += 1
+
         log.info(f"Number of Offers: {len(offers_list)}")
-        return offers_list
+        log.info(f"Claimed: {claimed_count}")
+        log.info(f"Unclaimed: {unclaimed_count}")
+        log.info(f"Cannot be Claimed: {cannot_claim_count}")
+        
+        return can_claim_offers
 
     except Exception as e:
         log.error(f"Offer list error: {e}")
@@ -280,7 +306,7 @@ async def claim_offer(item: dict, client: httpx.AsyncClient, headers: dict) -> T
     
     if not eligibility["isClaimed"]:
         if not eligibility["canClaim"] and eligibility["missingRequiredAccountLink"]:
-            log.error(f"{RED}Cannot collect game '{item['game']['assets']['title']}', account link required.{RESET}")
+            log.error(f"{RED}Cannot collect '{item['game']['assets']['title']}', account link required.{RESET}")
             return
         
         log.info(f"Collecting offer for {item['game']['assets']['title']}")
@@ -324,8 +350,6 @@ async def claim_offer(item: dict, client: httpx.AsyncClient, headers: dict) -> T
         claim_response = await client.post(gql_url, headers=headers, data=json.dumps(claim_payload))
         if claim_response.json()["data"]["placeOrders"]["error"] is not None:
             log.error(f"Error: {response.json()['data']['placeOrders']['error']}")
-
-        await asyncio.sleep(3) #There should be a better way to wait for the order finish processing
         
         offer = await get_offer(item, client, headers)
         if offer["grantsCode"] is not None:
@@ -367,9 +391,6 @@ async def primelooter(cookie_file, publisher_file):
         list = await offers_list(client, json_headers)
 
         for item in list:
-            if item["offers"][0]["offerSelfConnection"]["eligibility"]["isClaimed"]:
-                log.error(f"{BLUE}Cannot collect game '{item['game']['assets']['title']}', already collected.{RESET}")
-                
             offer = await get_offer(item, client, json_headers)
             
             if "game" in offer and "publisher" in offer["game"]["assets"]:
