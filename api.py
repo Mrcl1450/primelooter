@@ -12,8 +12,9 @@ log = logging.getLogger()
 
 RED = '\033[91m'
 BLUE = '\033[94m'
-YELLOW = '\033[93m'
 CYAN = '\033[96m'
+MAGENTA = '\033[95m'
+GREEN = '\033[92m'
 RESET = '\033[0m'
 
 list_payload = {
@@ -240,41 +241,53 @@ async def offers_list(client: httpx.AsyncClient, headers: dict):
 
         claimed_count = 0
         unclaimed_count = 0
-        cannot_claim_count = 0
         
-        can_claim_offers = []
+        can_claim = []
 
         for offer in offers_list:
             eligibility = offer["offers"][0]["offerSelfConnection"]["eligibility"]
             is_claimed = eligibility.get("isClaimed", False)
-            can_claim = eligibility.get("canClaim", False)
 
             if is_claimed:
-                log.error(f"{BLUE}'{offer['game']['assets']['title']}' - '{offer['assets']['title']}': Already collected.{RESET}")
+                log.error(f"{BLUE}{offer['game']['assets']['title']} - {offer['assets']['title']}: Already collected.{RESET}")
                 claimed_count += 1
-            elif can_claim:
-                log.error(f"{CYAN}'{offer['game']['assets']['title']}' - '{offer['assets']['title']}': Trying to claim.{RESET}")
-                unclaimed_count += 1
-                can_claim_offers.append(offer)
             else:
-                log.error(f"{RED}'{offer['game']['assets']['title']}' - '{offer['assets']['title']}': Account link required. Link: {offer['assets']['externalClaimLink']}{RESET}")
-                cannot_claim_count += 1
+                log.error(f"{CYAN}{offer['game']['assets']['title']} - {offer['assets']['title']}: Trying to claim.{RESET}")
+                unclaimed_count += 1
+                can_claim.append(offer)
 
-        log.info(f"Number of Offers: {len(offers_list)}")
-        log.info(f"Claimed: {claimed_count}")
-        log.info(f"Unclaimed: {unclaimed_count}")
-        log.info(f"Cannot be Claimed: {cannot_claim_count}")
+        log.info(f"{MAGENTA}Number of Offers: {len(offers_list)}{RESET}")
+        log.info(f"{MAGENTA}Claimed: {claimed_count}{RESET}")
+        log.info(f"{MAGENTA}Unclaimed: {unclaimed_count}{RESET}\n")
+
+        games_list = list_response.json()["data"]["games"]["items"]
+
+        claimed_count = 0
+        unclaimed_count = 0
+
+        for game in games_list:
+            eligibility = game["offers"][0]["offerSelfConnection"]["eligibility"]
+            is_claimed = eligibility.get("isClaimed", False)
+
+            if is_claimed:
+                log.error(f"{BLUE}{game['game']['assets']['title']} - {game['assets']['title']}: Already collected.{RESET}")
+                claimed_count += 1
+            else:
+                log.error(f"{CYAN}{game['game']['assets']['title']} - {game['assets']['title']}: Trying to claim.{RESET}")
+                unclaimed_count += 1
+                can_claim.append(game)
+
+        log.info(f"{GREEN}Number of Games: {len(games_list)}{RESET}")
+        log.info(f"{GREEN}Claimed: {claimed_count}{RESET}")
+        log.info(f"{GREEN}Unclaimed: {unclaimed_count}{RESET}\n")
         
-        return can_claim_offers
+        return can_claim
 
     except Exception as e:
         log.error(f"Offer list error: {e}")
         raise
 
 async def get_offer(item: dict, client: httpx.AsyncClient, headers: dict):
-    log.debug(f"ID: {item['offers'][0]['id']}")
-    log.debug(f"Link: {item['assets']['externalClaimLink']}")
-    
     offer_payload = {
         "operationName": "ItemV2Context",
         "variables": {
@@ -301,15 +314,15 @@ async def get_offer(item: dict, client: httpx.AsyncClient, headers: dict):
         log.error(f"Offer error: {e}")
         raise
 
-async def claim_offer(item: dict, client: httpx.AsyncClient, headers: dict) -> True:
+async def claim_offer(item: dict, link: str, client: httpx.AsyncClient, headers: dict) -> True:
     eligibility = item["offers"][0]["offerSelfConnection"]["eligibility"]
     
     if not eligibility["isClaimed"]:
         if not eligibility["canClaim"] and eligibility["missingRequiredAccountLink"]:
-            log.error(f"{RED}Cannot collect '{item['game']['assets']['title']}', account link required.{RESET}")
+            log.error(f"{RED}{item['game']['assets']['title']} - {item['assets']['title']}: Account link required. Link: {link}{RESET}")
             return
         
-        log.info(f"Collecting offer for {item['game']['assets']['title']}")
+        log.info(f"Collecting {item['game']['assets']['title']} - {item['assets']['title']}")
         claim_payload = {
             "operationName": "placeOrdersDetailPage",
             "variables": {
@@ -352,7 +365,7 @@ async def claim_offer(item: dict, client: httpx.AsyncClient, headers: dict) -> T
             log.error(f"Error: {response.json()['data']['placeOrders']['error']}")
         
         offer = await get_offer(item, client, headers)
-        if offer["grantsCode"] is not None:
+        if offer.get("grantsCode") is True:
             write_to_file(offer)
 
 def write_to_file(item, separator_string=None):
@@ -360,11 +373,11 @@ def write_to_file(item, separator_string=None):
     with open("./game_codes.txt", "a") as f:
         log.info("Writing code to file")
         
-        claim_code = item['offers'][0]['offerSelfConnection']['orderInformation'][0]['claimCode']
-        instructions = item['assets']['claimInstructions'].replace('\\n', ' ')
+        claim_code = item["offers"][0]["offerSelfConnection"]["orderInformation"][0]["claimCode"]
+        instructions = item["assets"]["claimInstructions"].replace('\\n', ' ')
         
         f.write(
-            f"{item['game']['assets']['title']} - {item['assets']['title']}: {claim_code}\n\n"
+            f"{item['game']['assets']['title']} - {item['assets']['title']} Code: {claim_code}\n\n"
             f"{instructions}\n{separator_string}\n"
         )
 
@@ -399,4 +412,4 @@ async def primelooter(cookie_file, publisher_file):
                 if "all" not in publisher_file and publisher not in publisher_file:
                     continue
                 
-                await claim_offer(offer, client, json_headers)
+                await claim_offer(offer, item["assets"]["externalClaimLink"], client, json_headers)
