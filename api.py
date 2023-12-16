@@ -363,6 +363,8 @@ async def claim_offer(item: dict, link: str, client: httpx.AsyncClient, headers:
         claim_response = await client.post(gql_url, headers=headers, data=json.dumps(claim_payload))
         if claim_response.json()["data"]["placeOrders"]["error"] is not None:
             log.error(f"Error: {response.json()['data']['placeOrders']['error']}")
+
+        await asyncio.sleep(5)
         
         offer = await get_offer(item, client, headers)
         if offer.get("grantsCode") is True:
@@ -370,7 +372,7 @@ async def claim_offer(item: dict, link: str, client: httpx.AsyncClient, headers:
 
 def write_to_file(item, separator_string=None):
     separator_string = separator_string or "========================\n========================"
-    with open("./game_codes.txt", "a") as f:
+    with open("./game_codes.txt", "a", encoding="utf-8") as f:
         log.info("Writing code to file")
         
         claim_code = item["offers"][0]["offerSelfConnection"]["orderInformation"][0]["claimCode"]
