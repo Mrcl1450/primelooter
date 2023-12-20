@@ -33,8 +33,38 @@ logging.basicConfig(
 
 log = logging.getLogger()
 
-def use_api(cookie_file, publisher_file):
-    asyncio.run(primelooter(cookie_file, publisher_file))
+async def use_api(cookie_file, publishers, arg):
+    while True:
+        try:
+            log.info("Starting Prime Looter\n")
+            await primelooter(cookie_file, publishers)
+            log.info("Finished Looting!\n")
+        except AuthException as ex:
+            log.error(ex)
+            sys.exit(1)
+        except Exception as ex:
+            log.error(ex)
+            traceback.print_tb(ex.__traceback__)
+            time.sleep(60)
+        else:
+            if arg["loop"]:
+                log.info("Loop Enabled, sleeping for 24 hours.")
+                stream_handler.terminator = "\r"
+
+                sleep_time = 60 * 60 * 24
+                for time_slept in range(sleep_time):
+                    m, s = divmod(sleep_time - time_slept, 60)
+                    h, m = divmod(m, 60)
+                    log.info(
+                        f"{h:d}:{m:02d}:{s:02d} till next run...",
+                        extra={"block": "file"},
+                    )
+                    time.sleep(1)
+
+                stream_handler.terminator = "\n"
+
+        if not arg["loop"]:
+            break
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Notification bot for the lower saxony vaccination portal")
@@ -82,35 +112,5 @@ if __name__ == "__main__":
     cookie_file = arg["cookies"]
     if arg["debug"]:
         log.level = logging.DEBUG
-
-    while True:
-        try:
-            log.info("Starting Prime Looter\n")
-            use_api(cookie_file, publishers)
-            log.info("Finished Looting!\n")
-        except AuthException as ex:
-            log.error(ex)
-            sys.exit(1)
-        except Exception as ex:
-            log.error(ex)
-            traceback.print_tb(ex.__traceback__)
-            time.sleep(60)
-        else:
-            if arg["loop"]:
-                log.info("Loop Enabled, sleeping for 24 hours.")
-                stream_handler.terminator = "\r"
-
-                sleep_time = 60 * 60 * 24
-                for time_slept in range(sleep_time):
-                    m, s = divmod(sleep_time - time_slept, 60)
-                    h, m = divmod(m, 60)
-                    log.info(
-                        f"{h:d}:{m:02d}:{s:02d} till next run...",
-                        extra={"block": "file"},
-                    )
-                    time.sleep(1)
-
-                stream_handler.terminator = "\n"
-
-        if not arg["loop"]:
-            break
+    
+    asyncio.run(use_api(cookie_file, publishers, arg))

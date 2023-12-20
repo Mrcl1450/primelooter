@@ -237,51 +237,36 @@ async def offers_list(client: httpx.AsyncClient, headers: dict):
         list_response = await client.post(gql_url, headers=headers, data=json.dumps(list_payload))
         list_response.raise_for_status()
         
-        offers_list = list_response.json()["data"]["inGameLoot"]["items"]
+        loot_items = list_response.json()["data"]["inGameLoot"]["items"]
+        games_items = list_response.json()["data"]["games"]["items"]
 
-        claimed_count = 0
-        unclaimed_count = 0
+        async def process_items(items_list, item_type):
+            claimed_count = 0
+            unclaimed_count = 0
+            can_claim = []
+
+            for item in items_list:
+                eligibility = item["offers"][0]["offerSelfConnection"]["eligibility"]
+                is_claimed = eligibility.get("isClaimed", False)
+
+                if is_claimed:
+                    log.info(f"{BLUE}{item['game']['assets']['title']} - {item['assets']['title']} - {item_type}: Already collected.{RESET}")
+                    claimed_count += 1
+                else:
+                    log.info(f"{CYAN}{item['game']['assets']['title']} - {item['assets']['title']} - {item_type}: Trying to claim.{RESET}")
+                    unclaimed_count += 1
+                    can_claim.append(item)
+
+            log.info(f"{MAGENTA}Number of {item_type}: {len(items_list)}{RESET}")
+            log.info(f"{MAGENTA}Claimed: {claimed_count}{RESET}")
+            log.info(f"{MAGENTA}Unclaimed: {unclaimed_count}{RESET}\n")
+
+            return can_claim
         
-        can_claim = []
+        loot_can_claim = await process_items(loot_items, "Loot")
+        games_can_claim = await process_items(games_items, "Game")
 
-        for offer in offers_list:
-            eligibility = offer["offers"][0]["offerSelfConnection"]["eligibility"]
-            is_claimed = eligibility.get("isClaimed", False)
-
-            if is_claimed:
-                log.error(f"{BLUE}{offer['game']['assets']['title']} - {offer['assets']['title']}: Already collected.{RESET}")
-                claimed_count += 1
-            else:
-                log.error(f"{CYAN}{offer['game']['assets']['title']} - {offer['assets']['title']}: Trying to claim.{RESET}")
-                unclaimed_count += 1
-                can_claim.append(offer)
-
-        log.info(f"{MAGENTA}Number of Offers: {len(offers_list)}{RESET}")
-        log.info(f"{MAGENTA}Claimed: {claimed_count}{RESET}")
-        log.info(f"{MAGENTA}Unclaimed: {unclaimed_count}{RESET}\n")
-
-        games_list = list_response.json()["data"]["games"]["items"]
-
-        claimed_count = 0
-        unclaimed_count = 0
-
-        for game in games_list:
-            eligibility = game["offers"][0]["offerSelfConnection"]["eligibility"]
-            is_claimed = eligibility.get("isClaimed", False)
-
-            if is_claimed:
-                log.error(f"{BLUE}{game['game']['assets']['title']} - {game['assets']['title']}: Already collected.{RESET}")
-                claimed_count += 1
-            else:
-                log.error(f"{CYAN}{game['game']['assets']['title']} - {game['assets']['title']}: Trying to claim.{RESET}")
-                unclaimed_count += 1
-                can_claim.append(game)
-
-        log.info(f"{GREEN}Number of Games: {len(games_list)}{RESET}")
-        log.info(f"{GREEN}Claimed: {claimed_count}{RESET}")
-        log.info(f"{GREEN}Unclaimed: {unclaimed_count}{RESET}\n")
-        
-        return can_claim
+        return loot_can_claim + games_can_claim
 
     except Exception as e:
         log.error(f"Offer list error: {e}")
@@ -306,7 +291,7 @@ async def get_offer(item: dict, client: httpx.AsyncClient, headers: dict):
         offer = offer_response.json()["data"]["itemV2"]["item"]
         
         if offer_response.json()["data"]["itemV2"]["error"] is not None:
-            log.error(f"Error: {response.json()['data']['itemV2']['error']}")
+            log.error(f"Error: {offer_response.json()['data']['itemV2']['error']}")
         
         return offer
 
@@ -319,7 +304,7 @@ async def claim_offer(item: dict, link: str, client: httpx.AsyncClient, headers:
     
     if not eligibility["isClaimed"]:
         if not eligibility["canClaim"] and eligibility["missingRequiredAccountLink"]:
-            log.error(f"{RED}{item['game']['assets']['title']} - {item['assets']['title']}: Account link required. Link: {link}{RESET}")
+            log.error(f"{RED}{item['game']['assets']['title']} - {item['assets']['title']}: Account link required. Link:{GREEN} {link}{RESET}")
             return
         
         log.info(f"Collecting {item['game']['assets']['title']} - {item['assets']['title']}")
@@ -362,15 +347,29 @@ async def claim_offer(item: dict, link: str, client: httpx.AsyncClient, headers:
 
         claim_response = await client.post(gql_url, headers=headers, data=json.dumps(claim_payload))
         if claim_response.json()["data"]["placeOrders"]["error"] is not None:
-            log.error(f"Error: {response.json()['data']['placeOrders']['error']}")
-
-        await asyncio.sleep(5)
+            log.error(f"Error: {claim_response.json()['data']['placeOrders']['error']}")
         
         offer = await get_offer(item, client, headers)
         if offer.get("grantsCode") is True:
+            asyncio.create_task(get_code(item, client, headers))
+
+async def get_code(item, client, headers):
+    max_retries = 5
+    retry_count = 0
+
+    while retry_count < max_retries:
+        offer = await get_offer(item, client, headers)
+        order_information = offer["offers"][0]["offerSelfConnection"]["orderInformation"]
+
+        if order_information and order_information[0].get("claimCode"):
             write_to_file(offer)
+            break
+
+        retry_count += 1
+        await asyncio.sleep(3)
 
 def write_to_file(item, separator_string=None):
+    print(json.dumps(item, indent=2))
     separator_string = separator_string or "========================\n========================"
     with open("./game_codes.txt", "a", encoding="utf-8") as f:
         log.info("Writing code to file")
@@ -403,9 +402,9 @@ async def primelooter(cookie_file, publisher_file):
         
         await authenticate(client, json_headers)
         
-        list = await offers_list(client, json_headers)
+        offer_list = await offers_list(client, json_headers)
 
-        for item in list:
+        for item in offer_list:
             offer = await get_offer(item, client, json_headers)
             
             if "game" in offer and "publisher" in offer["game"]["assets"]:
