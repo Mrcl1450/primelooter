@@ -369,13 +369,12 @@ async def get_code(item, client, headers):
         await asyncio.sleep(3)
 
 def write_to_file(item, separator_string=None):
-    print(json.dumps(item, indent=2))
     separator_string = separator_string or "========================\n========================"
     with open("./game_codes.txt", "a", encoding="utf-8") as f:
-        log.info("Writing code to file")
-        
         claim_code = item["offers"][0]["offerSelfConnection"]["orderInformation"][0]["claimCode"]
         instructions = item["assets"]["claimInstructions"].replace('\\n', ' ')
+        
+        log.info(f"{item['game']['assets']['title']} - {item['assets']['title']} Saving Code: {claim_code}")
         
         f.write(
             f"{item['game']['assets']['title']} - {item['assets']['title']} Code: {claim_code}\n\n"
