@@ -353,7 +353,7 @@ async def claim_offer(item: dict, link: str, client: httpx.AsyncClient, headers:
         if offer.get("grantsCode") is True:
             asyncio.create_task(get_code(item, client, headers))
 
-async def get_code(item, client, headers):
+async def get_code(item: dict, client: httpx.AsyncClient, headers: dict) -> True:
     max_retries = 5
     retry_count = 0
 
@@ -380,10 +380,25 @@ def write_to_file(item, separator_string=None):
             f"{item['game']['assets']['title']} - {item['assets']['title']} Code: {claim_code}\n\n"
             f"{instructions}\n{separator_string}\n"
         )
+        
+async def filter_offers(client: httpx.AsyncClient, headers: dict, publishers: dict) -> True:
+    offer_list = await offers_list(client, headers)
+
+    for item in offer_list:
+        offer = await get_offer(item, client, headers)
+            
+        if "game" in offer and "publisher" in offer["game"]["assets"]:
+            publisher = offer["game"]["assets"]["publisher"]
+
+            if "all" not in publishers and publisher not in publishers:
+                continue
+                
+            await claim_offer(offer, item["assets"]["externalClaimLink"], client, headers)
 
 async def primelooter(cookie_file, publisher_file):
     jar = cookiejar.MozillaCookieJar(cookie_file)
     jar.load()
+    
     async with httpx.AsyncClient() as client:
         base_headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0",
@@ -392,6 +407,7 @@ async def primelooter(cookie_file, publisher_file):
         json_headers = base_headers | {
             "Content-Type": "application/json",
         }
+        
         for _c in jar:
             client.cookies.jar.set_cookie(_c)
 
@@ -400,16 +416,4 @@ async def primelooter(cookie_file, publisher_file):
         json_headers["csrf-token"] = matches[0]
         
         await authenticate(client, json_headers)
-        
-        offer_list = await offers_list(client, json_headers)
-
-        for item in offer_list:
-            offer = await get_offer(item, client, json_headers)
-            
-            if "game" in offer and "publisher" in offer["game"]["assets"]:
-                publisher = offer["game"]["assets"]["publisher"]
-
-                if "all" not in publisher_file and publisher not in publisher_file:
-                    continue
-                
-                await claim_offer(offer, item["assets"]["externalClaimLink"], client, json_headers)
+        await filter_offers(client, json_headers, publisher_file)
