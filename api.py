@@ -351,13 +351,16 @@ async def claim_offer(item: dict, link: str, client: httpx.AsyncClient, headers:
         
         offer = await get_offer(item, client, headers)
         if offer.get("grantsCode") is True:
-            asyncio.create_task(get_code(item, client, headers))
+            await get_code(item, client, headers)
 
 async def get_code(item: dict, client: httpx.AsyncClient, headers: dict) -> True:
     max_retries = 5
     retry_count = 0
 
     while retry_count < max_retries:
+        if client.is_closed:
+            client = httpx.AsyncClient()
+
         offer = await get_offer(item, client, headers)
         order_information = offer["offers"][0]["offerSelfConnection"]["orderInformation"]
 
@@ -367,6 +370,9 @@ async def get_code(item: dict, client: httpx.AsyncClient, headers: dict) -> True
 
         retry_count += 1
         await asyncio.sleep(3)
+
+    if retry_count == max_retries:
+        log.error(f"{RED} Unable to retrieve the code after {max_retries} retries for {item['game']['assets']['title']} - {item['assets']['title']}{RESET}")
 
 def write_to_file(item, separator_string=None):
     separator_string = separator_string or "========================\n========================"
