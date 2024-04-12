@@ -38,6 +38,19 @@ Create a publishers.txt like the example file. Each line represents the publishe
 
 ### 4. 🏃 Run
 
+### 5. View claimed codes and keys
+<details>
+  <summary><b>.txt</b></summary>
+      Open game_codes.txt inside the folder
+</details>
+
+<details>
+  <summary><b>Window</b></summary>
+      Run game_codes.py or use PyInstaller to create a executable
+</details>
+
+
+
 The script offers multiple arguments:
 ```bash
 -p PUBLISHERS, --publishers PUBLISHERS
