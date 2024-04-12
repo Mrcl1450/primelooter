@@ -17,6 +17,10 @@ MAGENTA = '\033[95m'
 GREEN = '\033[92m'
 RESET = '\033[0m'
 
+blacklist = [
+    "Fallout - Season 1",
+]
+
 list_payload = {
     "operationName": "OffersContext_Offers_And_Items",
     "variables": {"pageSize": 999},
@@ -244,18 +248,19 @@ async def offers_list(client: httpx.AsyncClient, headers: dict):
             claimed_count = 0
             unclaimed_count = 0
             can_claim = []
-
+            
             for item in items_list:
-                eligibility = item["offers"][0]["offerSelfConnection"]["eligibility"]
-                is_claimed = eligibility.get("isClaimed", False)
+                if item["assets"]["title"] not in blacklist:
+                    eligibility = item["offers"][0]["offerSelfConnection"]["eligibility"]
+                    is_claimed = eligibility.get("isClaimed", False)
 
-                if is_claimed:
-                    log.info(f"{BLUE}{item['game']['assets']['title']} - {item['assets']['title']} - {item_type}: Already collected.{RESET}")
-                    claimed_count += 1
-                else:
-                    log.info(f"{CYAN}{item['game']['assets']['title']} - {item['assets']['title']} - {item_type}: Trying to claim.{RESET}")
-                    unclaimed_count += 1
-                    can_claim.append(item)
+                    if is_claimed:
+                        log.info(f"{BLUE}{item['game']['assets']['title']} - {item['assets']['title']} - {item_type}: Already collected.{RESET}")
+                        claimed_count += 1
+                    else:
+                        log.info(f"{CYAN}{item['game']['assets']['title']} - {item['assets']['title']} - {item_type}: Trying to claim.{RESET}")
+                        unclaimed_count += 1
+                        can_claim.append(item)
 
             log.info(f"{MAGENTA}Number of {item_type}: {len(items_list)}{RESET}")
             log.info(f"{MAGENTA}Claimed: {claimed_count}{RESET}")
@@ -359,7 +364,7 @@ async def get_code(item: dict, client: httpx.AsyncClient, headers: dict) -> True
 
     while retry_count < max_retries:
         if client.is_closed:
-            client = httpx.AsyncClient()
+                client = httpx.AsyncClient()
 
         offer = await get_offer(item, client, headers)
         order_information = offer["offers"][0]["offerSelfConnection"]["orderInformation"]
@@ -389,10 +394,10 @@ def write_to_file(item, separator_string=None):
         
 async def filter_offers(client: httpx.AsyncClient, headers: dict, publishers: dict) -> True:
     offer_list = await offers_list(client, headers)
-
+    
     for item in offer_list:
         offer = await get_offer(item, client, headers)
-            
+        
         if "game" in offer and "publisher" in offer["game"]["assets"]:
             publisher = offer["game"]["assets"]["publisher"]
 
