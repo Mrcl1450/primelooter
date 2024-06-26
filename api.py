@@ -19,6 +19,7 @@ RESET = '\033[0m'
 
 blacklist = [
     "Fallout - Season 1",
+    "Prime 2024 Teasers",
 ]
 
 list_payload = {
@@ -250,7 +251,7 @@ async def offers_list(client: httpx.AsyncClient, headers: dict):
             can_claim = []
 
             for item in items_list:
-                if item["assets"]["title"] not in blacklist:
+                if item["assets"]["title"] not in blacklist and item['game']['assets']['title'] not in blacklist:
                     eligibility = item["offers"][0]["offerSelfConnection"]["eligibility"]
                     is_claimed = eligibility.get("isClaimed", False)
 
@@ -397,7 +398,7 @@ async def filter_offers(client: httpx.AsyncClient, headers: dict, publishers: di
 
     for item in offer_list:
         offer = await get_offer(item, client, headers)
-
+        
         if "game" in offer and "publisher" in offer["game"]["assets"]:
             publisher = offer["game"]["assets"]["publisher"]
 
