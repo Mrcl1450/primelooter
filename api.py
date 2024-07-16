@@ -20,6 +20,7 @@ RESET = '\033[0m'
 blacklist = [
     "Fallout - Season 1",
     "Prime 2024 Teasers",
+    "Celebrate Prime Day",
 ]
 
 list_payload = {
