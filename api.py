@@ -5,7 +5,7 @@ import re
 import logging
 import http.cookiejar as cookiejar
 
-gql_url = "https://gaming.amazon.com/graphql"
+gql_url = "https://luna.amazon.com/graphql"
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger()
@@ -424,7 +424,7 @@ async def primelooter(cookie_file, publisher_file):
         for _c in jar:
             client.cookies.jar.set_cookie(_c)
 
-        html_body = (await client.get("https://gaming.amazon.com/home", headers=base_headers)).text
+        html_body = (await client.get("https://luna.amazon.com/home", headers=base_headers)).text
         matches = re.findall(r"name='csrf-key' value='(.*)'", html_body)
         json_headers["csrf-token"] = matches[0]
 
