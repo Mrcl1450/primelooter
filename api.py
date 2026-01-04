@@ -3,12 +3,18 @@ import json
 import asyncio
 import re
 import logging
+import sys
+import codecs
 import http.cookiejar as cookiejar
 
 gql_url = "https://luna.amazon.com/graphql"
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger()
+
+if sys.platform == "win32":
+    sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+    sys.stderr = codecs.getwriter("utf-8")(sys.stderr.detach())
 
 RED = '\033[91m'
 BLUE = '\033[94m'
